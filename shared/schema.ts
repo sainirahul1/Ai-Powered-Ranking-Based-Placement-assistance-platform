@@ -1,18 +1,53 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, jsonb, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Export chat models
+export * from "./models/chat";
+
+// Mock User for now
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// Roadmap Request Schema
+export const roadmaps = pgTable("roadmaps", {
+  id: serial("id").primaryKey(),
+  role: text("role").notNull(), // e.g., "Frontend Developer"
+  experienceLevel: text("experience_level").notNull(), // e.g., "Beginner"
+  goals: text("goals").notNull(),
+  generatedContent: jsonb("generated_content"), // The AI response
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+// Interview Session Schema
+export const interviews = pgTable("interviews", {
+  id: serial("id").primaryKey(),
+  topic: text("topic").notNull(),
+  difficulty: text("difficulty").notNull(), // e.g., "Easy", "Medium", "Hard"
+  status: text("status").notNull().default("pending"), // pending, active, completed
+  feedback: jsonb("feedback"), // AI feedback
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Zod Schemas
+export const insertRoadmapSchema = createInsertSchema(roadmaps).omit({ 
+  id: true, 
+  generatedContent: true, 
+  createdAt: true 
+});
+
+export const insertInterviewSchema = createInsertSchema(interviews).omit({ 
+  id: true, 
+  status: true, 
+  feedback: true, 
+  createdAt: true 
+});
+
+export type Roadmap = typeof roadmaps.$inferSelect;
+export type InsertRoadmap = z.infer<typeof insertRoadmapSchema>;
+
+export type Interview = typeof interviews.$inferSelect;
+export type InsertInterview = z.infer<typeof insertInterviewSchema>;
