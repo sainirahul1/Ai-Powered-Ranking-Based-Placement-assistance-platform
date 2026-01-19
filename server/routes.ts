@@ -56,5 +56,28 @@ export async function registerRoutes(
     res.json(interviews);
   });
 
+  // MongoDB Atlas Routes
+  app.post("/api/roadmap", async (req, res) => {
+    res.json({
+      role: req.body.role || "Developer",
+      steps: [
+        { id: 1, title: "Learn Basics", description: "Master the fundamentals." },
+        { id: 2, title: "Build Projects", description: "Apply your knowledge." }
+      ]
+    });
+  });
+
+  app.post("/api/interview/answer", async (req, res) => {
+    res.json({ status: "success", message: "Answer recorded" });
+  });
+
+  app.get("/api/interview/report", async (req, res) => {
+    res.json({
+      score: 85,
+      summary: "Great performance! Focus on system design.",
+      details: []
+    });
+  });
+
   return httpServer;
 }
