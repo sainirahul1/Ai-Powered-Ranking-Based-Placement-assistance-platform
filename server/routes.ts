@@ -8,6 +8,8 @@ import { registerAudioRoutes } from "./replit_integrations/audio";
 import { api } from "@shared/routes";
 import { z } from "zod";
 
+import { generateAILogic } from "./aiService";
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -23,15 +25,19 @@ export async function registerRoutes(
   app.post(api.roadmap.generate.path, async (req, res) => {
     try {
       const data = api.roadmap.generate.input.parse(req.body);
-      const roadmap = await storage.createRoadmap(data);
-      // In a real app, this would trigger the AI generation
+      
+      // AI Roadmap logic
+      const steps = await generateAILogic(data.role, data.experienceLevel, data.goals);
+      
+      const roadmap = await storage.createRoadmap({
+        ...data,
+        generatedContent: steps
+      } as any);
+      
       res.json(roadmap);
     } catch (error) {
-        if (error instanceof z.ZodError) {
-            res.status(400).json({ message: "Invalid input data" });
-        } else {
-            res.status(500).json({ message: "Internal server error" });
-        }
+      console.error("Roadmap error:", error);
+      res.status(500).json({ message: "Failed to generate AI roadmap" });
     }
   });
 
@@ -58,13 +64,16 @@ export async function registerRoutes(
 
   // MongoDB Atlas Routes
   app.post("/api/roadmap", async (req, res) => {
-    res.json({
-      role: req.body.role || "Developer",
-      steps: [
-        { id: 1, title: "Learn Basics", description: "Master the fundamentals." },
-        { id: 2, title: "Build Projects", description: "Apply your knowledge." }
-      ]
-    });
+    try {
+      const { role, experienceLevel, goals } = req.body;
+      const steps = await generateAILogic(role || "Developer", experienceLevel || "Beginner", goals || "Career growth");
+      res.json({
+        role: role || "Developer",
+        steps: steps
+      });
+    } catch (error) {
+      res.status(500).json({ message: "AI Generation failed" });
+    }
   });
 
   app.post("/api/interview/answer", async (req, res) => {
