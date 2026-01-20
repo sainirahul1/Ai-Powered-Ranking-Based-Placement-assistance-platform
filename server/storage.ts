@@ -5,7 +5,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: typeof users.$inferInsert): Promise<User>;
   
-  createRoadmap(roadmap: InsertRoadmap): Promise<Roadmap>;
+  createRoadmap(roadmap: InsertRoadmap & { generatedContent?: any }): Promise<Roadmap>;
   getRoadmaps(): Promise<Roadmap[]>;
   
   createInterview(interview: InsertInterview): Promise<Interview>;
@@ -40,12 +40,12 @@ export class MemStorage implements IStorage {
     return user;
   }
 
-  async createRoadmap(insertRoadmap: InsertRoadmap): Promise<Roadmap> {
+  async createRoadmap(insertRoadmap: InsertRoadmap & { generatedContent?: any }): Promise<Roadmap> {
     const id = this.currentId++;
     const roadmap: Roadmap = { 
       ...insertRoadmap, 
       id, 
-      generatedContent: null,
+      generatedContent: insertRoadmap.generatedContent || null,
       createdAt: new Date() 
     };
     this.roadmaps.set(id, roadmap);
