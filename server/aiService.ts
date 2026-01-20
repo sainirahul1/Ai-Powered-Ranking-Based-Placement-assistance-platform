@@ -6,29 +6,18 @@ const openai = new OpenAI({
 });
 
 export async function generateAILogic(role: string, experience: string, goals: string) {
-  // Enhanced prompt with strict formatting and explicit instructions to avoid placeholders
-  const prompt = `Act as an expert career coach. Create a highly specific technical learning roadmap for a ${experience} ${role} who wants to achieve: "${goals}".
+  const prompt = `Act as an expert career coach. Create a weekly structured technical learning roadmap for a ${experience} ${role} who wants to achieve: "${goals}".
   
   CRITICAL INSTRUCTIONS:
-  - Do NOT use generic titles like "Topic A", "Step 1", or "Foundations". Use specific technical names (e.g., "React Hooks & State Management", "Advanced System Design").
-  - For each step, provide a detailed description and a direct YouTube search link.
+  - Organize the roadmap by WEEKS (e.g., "Week 1", "Week 2").
+  - Do NOT use generic titles like "Topic A" or "Foundations". Use specific technical names.
+  - For each week, provide a detailed description and a direct YouTube search link.
   
   Return ONLY a JSON object with a "steps" key containing an array of exactly 5 objects.
   Each object must have:
-  - "title": A specific technical topic name.
-  - "description": 2-3 sentences of what to learn.
-  - "youtubeLink": A URL formatted as: https://www.youtube.com/results?search_query=[encoded+topic+name]+tutorial
-  
-  Example structure:
-  {
-    "steps": [
-      {
-        "title": "Mastering TypeScript Generics",
-        "description": "Learn how to build reusable components and utility functions using advanced TS types.",
-        "youtubeLink": "https://www.youtube.com/results?search_query=typescript+generics+tutorial"
-      }
-    ]
-  }`;
+  - "title": The week name and specific technical focus (e.g., "Week 1: Mastering TypeScript Fundamentals").
+  - "description": 2-3 sentences of what to learn this week.
+  - "youtubeLink": A URL formatted as: https://www.youtube.com/results?search_query=[encoded+topic+name]+tutorial`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -45,24 +34,20 @@ export async function generateAILogic(role: string, experience: string, goals: s
     else if (data.steps && Array.isArray(data.steps)) steps = data.steps;
     else if (data.roadmap && Array.isArray(data.roadmap)) steps = data.roadmap;
     
-    if (steps.length === 0) {
-        throw new Error("No steps generated");
-    }
-
+    if (steps.length === 0) throw new Error("No steps generated");
     return steps;
   } catch (error) {
     console.error("AI Generation Error:", error);
-    // Dynamic fallback that actually uses the role
     return [
       { 
-        title: `Core ${role} Skills`, 
-        description: `Master the essential tools and frameworks required for a ${role} role.`,
-        youtubeLink: `https://www.youtube.com/results?search_query=${encodeURIComponent(role + " full course")}`
+        title: "Week 1: Core Fundamentals", 
+        description: `Establish a strong foundation in ${role} principles and core syntax.`,
+        youtubeLink: `https://www.youtube.com/results?search_query=${encodeURIComponent(role + " fundamentals")}`
       },
       { 
-        title: `Professional ${role} Projects`, 
-        description: `Build and deploy real-world projects to demonstrate your ${experience} proficiency.`,
-        youtubeLink: `https://www.youtube.com/results?search_query=${encodeURIComponent(role + " project tutorial")}`
+        title: "Week 2: Intermediate Concepts", 
+        description: `Deep dive into advanced topics related to ${goals}.`,
+        youtubeLink: `https://www.youtube.com/results?search_query=${encodeURIComponent(goals + " intermediate tutorial")}`
       }
     ];
   }
