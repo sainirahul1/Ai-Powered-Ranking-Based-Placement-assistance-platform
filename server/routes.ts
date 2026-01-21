@@ -7,8 +7,11 @@ import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import jwt from "jsonwebtoken";
 
 import { generateAILogic } from "./aiService";
+
+const JWT_SECRET = process.env.SESSION_SECRET || "fallback_secret_123";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -41,7 +44,59 @@ export async function registerRoutes(
     }
   });
 
-  // Start Interview
+  // Mock Interview Session Endpoints
+  app.post("/api/interview/session/start", async (req, res) => {
+    try {
+      const { name, domains, duration } = req.body;
+      
+      if (!name || !domains || !duration) {
+        return res.status(400).json({ message: "Missing required session data" });
+      }
+
+      // Create a JWT token for the session
+      const token = jwt.sign(
+        { 
+          name, 
+          domains, 
+          duration,
+          startTime: Date.now() 
+        }, 
+        JWT_SECRET,
+        { expiresIn: `${duration}m` }
+      );
+
+      res.json({ 
+        token, 
+        message: "Interview session locked and started",
+        session: { name, domains, duration }
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create interview session" });
+    }
+  });
+
+  app.get("/api/interview/session/timer", (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ message: "No session token" });
+
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const elapsed = Math.floor((Date.now() - decoded.startTime) / 1000);
+      const totalSeconds = decoded.duration * 60;
+      const remaining = Math.max(0, totalSeconds - elapsed);
+
+      res.json({ 
+        remaining,
+        total: totalSeconds,
+        isExpired: remaining === 0
+      });
+    } catch (err) {
+      res.status(401).json({ message: "Invalid or expired session" });
+    }
+  });
+
+  // Start Interview (Original)
   app.post(api.interview.start.path, async (req, res) => {
     try {
       const data = api.interview.start.input.parse(req.body);
