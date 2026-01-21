@@ -1,7 +1,7 @@
 import { Layout } from "@/components/ui/Layout";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowRight, Compass, LayoutDashboard, Sparkles, Target } from "lucide-react";
+import { ArrowRight, Compass, LayoutDashboard, Sparkles, Target, Github } from "lucide-react";
 
 export default function Home() {
   return (
@@ -33,6 +33,9 @@ export default function Home() {
               </Link>
               <Link href="/interview" className="inline-flex items-center justify-center px-8 py-4 rounded-xl bg-card border border-border text-foreground font-bold text-lg shadow-sm hover:border-primary/50 hover:text-primary transition-all duration-300">
                 Start Mock Interview
+              </Link>
+              <Link href="/github-setup" className="inline-flex items-center justify-center px-8 py-4 rounded-xl bg-card border border-border text-foreground font-bold text-lg shadow-sm hover:border-primary/50 hover:text-primary transition-all duration-300">
+                <Github className="mr-2 w-5 h-5" /> Push to GitHub
               </Link>
             </div>
           </motion.div>
