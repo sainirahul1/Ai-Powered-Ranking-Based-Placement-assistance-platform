@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize, AlertCircle, Timer, ChevronRight } from "lucide-react";
+import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize, AlertCircle, Timer, ChevronRight, Trophy, Star } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 const DOMAINS = [
   "Frontend Development",
@@ -90,11 +91,16 @@ declare global {
   }
 }
 
+interface EvaluationResult {
+  score: number;
+  feedback: string;
+}
+
 export default function InterviewDashboard() {
   const [name, setName] = useState("");
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
   const [duration, setDuration] = useState("10");
-  const [view, setView] = useState<"dashboard" | "greeting" | "interview">("dashboard");
+  const [view, setView] = useState<"dashboard" | "greeting" | "interview" | "report">("dashboard");
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +109,8 @@ export default function InterviewDashboard() {
   const [questions, setQuestions] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [answers, setAnswers] = useState<string[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationResult[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -131,16 +138,11 @@ export default function InterviewDashboard() {
       });
       setStream(mediaStream);
       
-      // Build question set: mix common and domain-specific
-      let questionSet = [COMMON_QUESTIONS[0]]; // Always start with "Tell me about yourself"
-      
+      let questionSet = [COMMON_QUESTIONS[0]];
       selectedDomains.forEach(domain => {
         const domainQs = DOMAIN_QUESTIONS[domain] || [];
-        // Add up to 1-2 questions per domain
         questionSet.push(...domainQs.slice(0, 1));
       });
-      
-      // Fill the rest with common questions if needed, up to a reasonable amount (e.g., 5-6 total)
       const additionalCommon = COMMON_QUESTIONS.slice(1).filter(q => !questionSet.includes(q));
       questionSet.push(...additionalCommon.slice(0, Math.max(0, 5 - questionSet.length)));
       
@@ -204,7 +206,7 @@ export default function InterviewDashboard() {
     setView("interview");
     setCurrentQuestionIndex(0);
     setTimeLeft(parseInt(duration) * 60);
-    setAnswers([]);
+    setEvaluations([]);
     setTranscript("");
     
     if (timerRef.current) clearInterval(timerRef.current);
@@ -228,29 +230,45 @@ export default function InterviewDashboard() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const nextQuestion = () => {
-    const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < questions.length) {
-      setCurrentQuestionIndex(nextIndex);
-      setTranscript("");
-      speakQuestion(questions[nextIndex]);
-    } else {
-      handleSubmitInterview();
+  const nextQuestion = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      // Evaluate current answer
+      const res = await apiRequest("POST", "/api/interview/answer", {
+        question: questions[currentQuestionIndex],
+        answer: transcript || "No answer provided."
+      });
+      const data = await res.json();
+      setEvaluations(prev => [...prev, { score: data.score, feedback: data.feedback }]);
+
+      const nextIndex = currentQuestionIndex + 1;
+      if (nextIndex < questions.length) {
+        setCurrentQuestionIndex(nextIndex);
+        setTranscript("");
+        speakQuestion(questions[nextIndex]);
+      } else {
+        handleSubmitInterview();
+      }
+    } catch (err) {
+      console.error("Failed to evaluate:", err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSubmitInterview = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     window.speechSynthesis.cancel();
-    alert("Interview completed! (Report UI coming soon)");
-    setView("dashboard");
+    setView("report");
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
   };
 
   useEffect(() => {
-    if (view !== "dashboard" && videoRef.current && stream) {
+    if (view !== "dashboard" && view !== "report" && videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
   }, [view, stream]);
@@ -276,6 +294,101 @@ export default function InterviewDashboard() {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  if (view === "report") {
+    const totalScore = evaluations.reduce((acc, curr) => acc + curr.score, 0);
+    const averageScore = evaluations.length > 0 ? Math.round(totalScore / evaluations.length) : 0;
+
+    return (
+      <Layout>
+        <div className="max-w-4xl mx-auto py-12 px-4 space-y-8">
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-primary/10 mb-2">
+              <Trophy className="w-12 h-12 text-primary" />
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight">Interview Report</h1>
+            <p className="text-muted-foreground text-lg">Great job, {name}! Here is your performance breakdown.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card className="md:col-span-1 border-2 shadow-lg bg-primary/5">
+              <CardHeader className="text-center">
+                <CardTitle className="text-lg uppercase tracking-widest text-muted-foreground">Overall Score</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center justify-center pb-8">
+                <span className="text-7xl font-black text-primary">{averageScore}</span>
+                <div className="flex gap-1 mt-4">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star 
+                      key={star} 
+                      className={`w-6 h-6 ${averageScore >= star * 20 ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}`} 
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2 border-2 shadow-lg">
+              <CardHeader>
+                <CardTitle>Quick Summary</CardTitle>
+                <CardDescription>Performance highlights across {evaluations.length} questions.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Technical Proficiency</span>
+                    <span>{averageScore}%</span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${averageScore}%` }} />
+                  </div>
+                </div>
+                <div className="pt-4 text-muted-foreground leading-relaxed">
+                  Your overall performance indicates a strong grasp of {selectedDomains.join(", ")} concepts. Continue practicing to refine your delivery and technical depth.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold px-2">Detailed Feedback</h2>
+            <div className="space-y-4">
+              {evaluations.map((evalResult, index) => (
+                <Card key={index} className="border-2 hover:border-primary/50 transition-colors">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div className="space-y-1">
+                      <CardTitle className="text-base text-muted-foreground">Question {index + 1}</CardTitle>
+                      <p className="font-bold text-lg leading-tight">{questions[index]}</p>
+                    </div>
+                    <div className="text-3xl font-black text-primary ml-4">
+                      {evalResult.score}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                      <p className="text-foreground text-sm leading-relaxed italic">
+                        "{evalResult.feedback}"
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-center pt-8">
+            <Button 
+              size="lg" 
+              className="px-12 py-6 rounded-2xl text-xl font-bold shadow-xl shadow-primary/20"
+              onClick={() => setView("dashboard")}
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   if (view === "greeting" || view === "interview") {
     return (
@@ -359,10 +472,11 @@ export default function InterviewDashboard() {
 
                     <Button 
                       onClick={nextQuestion}
+                      disabled={isSubmitting}
                       className="w-full h-14 mt-8 text-lg font-bold group shadow-xl shadow-primary/20"
                     >
-                      {currentQuestionIndex === questions.length - 1 ? "Finish Interview" : "Next Question"}
-                      <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                      {isSubmitting ? "Evaluating..." : (currentQuestionIndex === questions.length - 1 ? "Finish Interview" : "Next Question")}
+                      {!isSubmitting && <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />}
                     </Button>
                   </div>
                 )}
