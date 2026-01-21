@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize, AlertCircle } from "lucide-react";
+import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize, AlertCircle, Timer, ChevronRight } from "lucide-react";
 
 const DOMAINS = [
   "Frontend Development",
@@ -21,6 +21,14 @@ const DOMAINS = [
   "Cybersecurity"
 ];
 
+const STATIC_QUESTIONS = [
+  "Tell me about yourself and your background.",
+  "Why are you interested in this role and our company?",
+  "What is your greatest professional achievement so far?",
+  "How do you handle conflict or disagreement in a team setting?",
+  "Where do you see yourself in five years?"
+];
+
 // Extend window for Web Speech API
 declare global {
   interface Window {
@@ -33,14 +41,20 @@ export default function InterviewDashboard() {
   const [name, setName] = useState("");
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
   const [duration, setDuration] = useState("10");
-  const [isGreeting, setIsGreeting] = useState(false);
+  const [view, setView] = useState<"dashboard" | "greeting" | "interview">("dashboard");
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   
+  // Interview state
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [answers, setAnswers] = useState<string[]>([]);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggleDomain = (domain: string) => {
     if (selectedDomains.includes(domain)) {
@@ -53,20 +67,17 @@ export default function InterviewDashboard() {
   const startInterview = async () => {
     try {
       setError(null);
-      // 1. Fullscreen
       if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen().catch(e => console.error("Fullscreen failed", e));
       }
 
-      // 2. Camera & Mic
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true
       });
       setStream(mediaStream);
-      setIsGreeting(true);
+      setView("greeting");
 
-      // 3. Speech Synthesis Greeting
       const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready. Please say "Ready" or "I am ready" to start.`;
       const utterance = new SpeechSynthesisUtterance(greeting);
       
@@ -83,14 +94,9 @@ export default function InterviewDashboard() {
 
   const startConfirmationDetection = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError("Speech recognition is not supported in this browser. Please use Chrome.");
-      return;
-    }
+    if (!SpeechRecognition) return;
 
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
-    }
+    if (recognitionRef.current) recognitionRef.current.stop();
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -105,46 +111,84 @@ export default function InterviewDashboard() {
       
       const lowerTranscript = currentTranscript.toLowerCase();
       setTranscript(lowerTranscript);
-      console.log("Transcript detected:", lowerTranscript);
       
       const keywords = ["yes", "ready", "okay", "ok", "begin", "start"];
       if (keywords.some(word => lowerTranscript.includes(word))) {
-        console.log("confirmed");
         setIsConfirmed(true);
-        // In a real app, this would trigger state machine transition
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
-      if (event.error === 'not-allowed') {
-        setError("Microphone permission denied for speech recognition.");
+        // Transition to actual interview after 1.5s
+        setTimeout(() => {
+          startQuestionLoop();
+        }, 1500);
       }
     };
 
     recognition.onend = () => {
-      if (isGreeting && !isConfirmed) {
-        try {
-          recognition.start();
-        } catch (e) {
-          console.error("Failed to restart recognition:", e);
-        }
+      if (view === "greeting" && !isConfirmed) {
+        try { recognition.start(); } catch (e) {}
       }
     };
 
-    try {
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch (e) {
-      console.error("Initial start failed:", e);
+    recognition.start();
+    recognitionRef.current = recognition;
+  };
+
+  const startQuestionLoop = () => {
+    setView("interview");
+    setCurrentQuestionIndex(0);
+    setTimeLeft(parseInt(duration) * 60);
+    setAnswers([]);
+    setTranscript("");
+    
+    // Start interview timer
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          // Auto submit logic
+          handleSubmitInterview();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Speak first question
+    speakQuestion(STATIC_QUESTIONS[0]);
+  };
+
+  const speakQuestion = (text: string) => {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const nextQuestion = () => {
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex < STATIC_QUESTIONS.length) {
+      setCurrentQuestionIndex(nextIndex);
+      setTranscript("");
+      speakQuestion(STATIC_QUESTIONS[nextIndex]);
+    } else {
+      handleSubmitInterview();
+    }
+  };
+
+  const handleSubmitInterview = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    window.speechSynthesis.cancel();
+    alert("Interview completed! (Report UI coming soon)");
+    setView("dashboard");
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
     }
   };
 
   useEffect(() => {
-    if (isGreeting && videoRef.current && stream) {
+    if (view !== "dashboard" && videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-  }, [isGreeting, stream]);
+  }, [view, stream]);
 
   useEffect(() => {
     return () => {
@@ -157,63 +201,108 @@ export default function InterviewDashboard() {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+      if (timerRef.current) clearInterval(timerRef.current);
       window.speechSynthesis.cancel();
     };
   }, []);
 
-  if (isGreeting) {
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (view === "greeting" || view === "interview") {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto h-[calc(100vh-12rem)] flex flex-col items-center justify-center space-y-8">
-          <div className="w-full h-full relative rounded-2xl overflow-hidden bg-black shadow-2xl border-4 border-primary/10">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
+        <div className="max-w-6xl mx-auto h-[calc(100vh-12rem)] flex flex-col items-center justify-center space-y-8">
+          <div className="w-full h-full relative rounded-3xl overflow-hidden bg-black shadow-2xl border-4 border-primary/10 flex flex-col md:flex-row">
             
-            <div className="absolute top-6 left-6 flex gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
-                <Video className="w-4 h-4 text-green-400" />
-                Camera ON
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
-                <Mic className="w-4 h-4 text-green-400" />
-                Mic ON
-              </div>
-            </div>
-
-            <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
-              <div className="bg-black/50 backdrop-blur-md p-6 rounded-2xl border border-white/10 max-w-2xl">
-                <p className="text-white text-xl font-medium leading-relaxed italic">
-                  {`"Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready."`}
-                </p>
-                
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${isConfirmed ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-primary animate-pulse'}`} />
-                    <p className={`${isConfirmed ? 'text-green-400' : 'text-primary/80'} text-sm font-semibold`}>
-                      {isConfirmed ? "Confirmed! Getting ready..." : "Listening... try saying \"READY\" loud and clear."}
-                    </p>
-                  </div>
-                  {transcript && !isConfirmed && (
-                    <p className="text-white/40 text-xs italic ml-6">
-                      Hearing: "{transcript}"
-                    </p>
-                  )}
-                  {error && (
-                    <div className="flex items-center gap-2 text-red-400 text-xs mt-2">
-                      <AlertCircle className="w-3 h-3" />
-                      {error}
-                    </div>
-                  )}
+            {/* Left: Camera Feed */}
+            <div className="relative flex-1 bg-slate-900 overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              
+              <div className="absolute top-6 left-6 flex gap-3">
+                <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-xs border border-white/20">
+                  <Video className="w-4 h-4 text-green-400" />
+                  Camera ON
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-xs border border-white/20">
+                  <Mic className="w-4 h-4 text-green-400" />
+                  Mic ON
                 </div>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
-                <Maximize className="w-4 h-4" />
-                Fullscreen
+
+              {view === "interview" && (
+                <div className="absolute top-6 right-6">
+                  <div className={`flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white font-bold border border-white/20 ${timeLeft < 60 ? 'text-red-400 animate-pulse' : ''}`}>
+                    <Timer className="w-4 h-4" />
+                    {formatTime(timeLeft)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Interaction Area */}
+            <div className="w-full md:w-[400px] bg-card flex flex-col border-l border-border">
+              <div className="p-6 border-b border-border bg-slate-50/50">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  {view === "greeting" ? "System Greeting" : `Question ${currentQuestionIndex + 1} of ${STATIC_QUESTIONS.length}`}
+                </h3>
+              </div>
+
+              <div className="flex-1 p-8 flex flex-col">
+                {view === "greeting" ? (
+                  <div className="space-y-6">
+                    <p className="text-xl font-medium leading-relaxed italic text-foreground">
+                      {`"Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready."`}
+                    </p>
+                    <div className="pt-4 border-t border-border">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`w-3 h-3 rounded-full ${isConfirmed ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-primary animate-pulse'}`} />
+                        <p className={`${isConfirmed ? 'text-green-400' : 'text-primary/80'} text-sm font-semibold uppercase tracking-wider`}>
+                          {isConfirmed ? "Confirmed!" : "Listening..."}
+                        </p>
+                      </div>
+                      <p className="text-muted-foreground text-sm leading-relaxed">
+                        {isConfirmed ? "Initializing interview session..." : "Please say \"Ready\", \"Start\", or \"Yes\" to begin your practice."}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full">
+                    <div className="flex-1">
+                      <h4 className="text-2xl font-bold text-foreground leading-snug mb-8">
+                        {STATIC_QUESTIONS[currentQuestionIndex]}
+                      </h4>
+                      
+                      <div className="space-y-4">
+                        <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Your Response (Live Transcript)</Label>
+                        <div className="p-4 rounded-xl bg-slate-50 border-2 border-slate-100 min-h-[150px] relative">
+                          <p className="text-foreground leading-relaxed">
+                            {transcript || "Waiting for your response..."}
+                          </p>
+                          {!transcript && <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none"><Mic className="w-12 h-12" /></div>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button 
+                      onClick={nextQuestion}
+                      className="w-full h-14 mt-8 text-lg font-bold group shadow-xl shadow-primary/20"
+                    >
+                      {currentQuestionIndex === STATIC_QUESTIONS.length - 1 ? "Finish Interview" : "Next Question"}
+                      <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -247,7 +336,6 @@ export default function InterviewDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-8">
-            {/* Name Input */}
             <div className="space-y-3">
               <Label htmlFor="name" className="text-base font-semibold flex items-center gap-2">
                 <GraduationCap className="w-4 h-4 text-primary" />
@@ -263,7 +351,6 @@ export default function InterviewDashboard() {
               />
             </div>
 
-            {/* Domain Selection */}
             <div className="space-y-4">
               <div className="flex justify-between items-end">
                 <Label className="text-base font-semibold flex items-center gap-2">
@@ -290,18 +377,13 @@ export default function InterviewDashboard() {
                       data-testid={`badge-domain-${domain.toLowerCase().replace(/\s+/g, '-')}`}
                     >
                       {domain}
-                      {isSelected ? (
-                        <X className="w-3 h-3 ml-2" />
-                      ) : (
-                        <Check className="w-3 h-3 ml-2 opacity-0 group-hover:opacity-100" />
-                      )}
+                      {isSelected ? <X className="w-3 h-3 ml-2" /> : <Check className="w-3 h-3 ml-2 opacity-0 group-hover:opacity-100" />}
                     </Badge>
                   );
                 })}
               </div>
             </div>
 
-            {/* Duration Selector */}
             <div className="space-y-4">
               <Label className="text-base font-semibold flex items-center gap-2">
                 <Clock className="w-4 h-4 text-primary" />
@@ -315,11 +397,7 @@ export default function InterviewDashboard() {
               >
                 {["5", "10", "15"].map((val) => (
                   <div key={val}>
-                    <RadioGroupItem
-                      value={val}
-                      id={`duration-${val}`}
-                      className="peer sr-only"
-                    />
+                    <RadioGroupItem value={val} id={`duration-${val}`} className="peer sr-only" />
                     <Label
                       htmlFor={`duration-${val}`}
                       className="flex flex-col items-center justify-center rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 [&:has([data-state=checked])]:border-primary cursor-pointer transition-all"
