@@ -21,7 +21,60 @@ const DOMAINS = [
   "Cybersecurity"
 ];
 
-const STATIC_QUESTIONS = [
+const DOMAIN_QUESTIONS: Record<string, string[]> = {
+  "Frontend Development": [
+    "What are the main differences between React and other frontend frameworks like Vue or Angular?",
+    "How do you optimize a website's performance and core web vitals?",
+    "Explain the concept of 'State Management' and when you'd use tools like Redux or Context API."
+  ],
+  "Backend Development": [
+    "What is the difference between SQL and NoSQL databases, and how do you choose between them?",
+    "Explain the concepts of REST and GraphQL. When would you use one over the other?",
+    "How do you handle authentication and authorization in a distributed system?"
+  ],
+  "Full Stack Development": [
+    "Describe the process of building a feature from frontend to backend.",
+    "How do you manage database migrations in a production environment?",
+    "What are some common security vulnerabilities in web applications and how do you prevent them?"
+  ],
+  "Data Science": [
+    "Explain the bias-variance tradeoff in machine learning models.",
+    "What is cross-validation and why is it important in model building?",
+    "How do you handle missing data or outliers in a dataset?"
+  ],
+  "Machine Learning": [
+    "What is the difference between supervised and unsupervised learning?",
+    "How does a neural network learn? Explain backpropagation.",
+    "What are some common metrics used to evaluate the performance of a classification model?"
+  ],
+  "Product Management": [
+    "How do you prioritize features in a product roadmap?",
+    "Describe a time you had to make a difficult product decision based on limited data.",
+    "What is your approach to gathering and incorporating user feedback into a product?"
+  ],
+  "UI/UX Design": [
+    "What are the key principles of responsive design?",
+    "Describe your process for conducting user research and testing.",
+    "How do you balance aesthetic design with functional usability?"
+  ],
+  "Mobile Development": [
+    "What are the main differences between native and cross-platform mobile development?",
+    "How do you handle offline data storage and synchronization in a mobile app?",
+    "Explain the mobile application lifecycle and how you manage state within it."
+  ],
+  "Cloud Engineering": [
+    "What are the benefits of using a serverless architecture?",
+    "Explain the difference between IaaS, PaaS, and SaaS.",
+    "How do you design for high availability and disaster recovery in the cloud?"
+  ],
+  "Cybersecurity": [
+    "What is the difference between symmetric and asymmetric encryption?",
+    "How do you prevent SQL injection and Cross-Site Scripting (XSS) attacks?",
+    "Explain the concept of Zero Trust security and its core principles."
+  ]
+};
+
+const COMMON_QUESTIONS = [
   "Tell me about yourself and your background.",
   "Why are you interested in this role and our company?",
   "What is your greatest professional achievement so far?",
@@ -47,6 +100,7 @@ export default function InterviewDashboard() {
   const [error, setError] = useState<string | null>(null);
   
   // Interview state
+  const [questions, setQuestions] = useState<string[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -76,6 +130,21 @@ export default function InterviewDashboard() {
         audio: true
       });
       setStream(mediaStream);
+      
+      // Build question set: mix common and domain-specific
+      let questionSet = [COMMON_QUESTIONS[0]]; // Always start with "Tell me about yourself"
+      
+      selectedDomains.forEach(domain => {
+        const domainQs = DOMAIN_QUESTIONS[domain] || [];
+        // Add up to 1-2 questions per domain
+        questionSet.push(...domainQs.slice(0, 1));
+      });
+      
+      // Fill the rest with common questions if needed, up to a reasonable amount (e.g., 5-6 total)
+      const additionalCommon = COMMON_QUESTIONS.slice(1).filter(q => !questionSet.includes(q));
+      questionSet.push(...additionalCommon.slice(0, Math.max(0, 5 - questionSet.length)));
+      
+      setQuestions(questionSet);
       setView("greeting");
 
       const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready. Please say "Ready" or "I am ready" to start.`;
@@ -115,7 +184,6 @@ export default function InterviewDashboard() {
       const keywords = ["yes", "ready", "okay", "ok", "begin", "start"];
       if (keywords.some(word => lowerTranscript.includes(word))) {
         setIsConfirmed(true);
-        // Transition to actual interview after 1.5s
         setTimeout(() => {
           startQuestionLoop();
         }, 1500);
@@ -139,13 +207,11 @@ export default function InterviewDashboard() {
     setAnswers([]);
     setTranscript("");
     
-    // Start interview timer
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
-          // Auto submit logic
           handleSubmitInterview();
           return 0;
         }
@@ -153,8 +219,7 @@ export default function InterviewDashboard() {
       });
     }, 1000);
 
-    // Speak first question
-    speakQuestion(STATIC_QUESTIONS[0]);
+    speakQuestion(questions[0]);
   };
 
   const speakQuestion = (text: string) => {
@@ -165,10 +230,10 @@ export default function InterviewDashboard() {
 
   const nextQuestion = () => {
     const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < STATIC_QUESTIONS.length) {
+    if (nextIndex < questions.length) {
       setCurrentQuestionIndex(nextIndex);
       setTranscript("");
-      speakQuestion(STATIC_QUESTIONS[nextIndex]);
+      speakQuestion(questions[nextIndex]);
     } else {
       handleSubmitInterview();
     }
@@ -218,7 +283,6 @@ export default function InterviewDashboard() {
         <div className="max-w-6xl mx-auto h-[calc(100vh-12rem)] flex flex-col items-center justify-center space-y-8">
           <div className="w-full h-full relative rounded-3xl overflow-hidden bg-black shadow-2xl border-4 border-primary/10 flex flex-col md:flex-row">
             
-            {/* Left: Camera Feed */}
             <div className="relative flex-1 bg-slate-900 overflow-hidden">
               <video
                 ref={videoRef}
@@ -249,12 +313,11 @@ export default function InterviewDashboard() {
               )}
             </div>
 
-            {/* Right: Interaction Area */}
             <div className="w-full md:w-[400px] bg-card flex flex-col border-l border-border">
               <div className="p-6 border-b border-border bg-slate-50/50">
                 <h3 className="font-bold text-lg flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  {view === "greeting" ? "System Greeting" : `Question ${currentQuestionIndex + 1} of ${STATIC_QUESTIONS.length}`}
+                  {view === "greeting" ? "System Greeting" : `Question ${currentQuestionIndex + 1} of ${questions.length}`}
                 </h3>
               </div>
 
@@ -280,7 +343,7 @@ export default function InterviewDashboard() {
                   <div className="flex flex-col h-full">
                     <div className="flex-1">
                       <h4 className="text-2xl font-bold text-foreground leading-snug mb-8">
-                        {STATIC_QUESTIONS[currentQuestionIndex]}
+                        {questions[currentQuestionIndex]}
                       </h4>
                       
                       <div className="space-y-4">
@@ -298,7 +361,7 @@ export default function InterviewDashboard() {
                       onClick={nextQuestion}
                       className="w-full h-14 mt-8 text-lg font-bold group shadow-xl shadow-primary/20"
                     >
-                      {currentQuestionIndex === STATIC_QUESTIONS.length - 1 ? "Finish Interview" : "Next Question"}
+                      {currentQuestionIndex === questions.length - 1 ? "Finish Interview" : "Next Question"}
                       <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </div>
