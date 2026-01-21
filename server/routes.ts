@@ -9,7 +9,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 
-import { generateAILogic } from "./aiService";
+import { generateAILogic, evaluateAnswer } from "./aiService";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "fallback_secret_123";
 
@@ -132,7 +132,17 @@ export async function registerRoutes(
   });
 
   app.post("/api/interview/answer", async (req, res) => {
-    res.json({ status: "success", message: "Answer recorded" });
+    try {
+      const { question, answer } = req.body;
+      if (!question || !answer) {
+        return res.status(400).json({ message: "Missing question or answer" });
+      }
+      
+      const evaluation = await evaluateAnswer(question, answer);
+      res.json({ status: "success", message: "Answer recorded", ...evaluation });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to evaluate answer" });
+    }
   });
 
   app.get("/api/interview/report", async (req, res) => {

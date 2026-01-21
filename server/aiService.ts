@@ -5,6 +5,57 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+/**
+ * Evaluates an interview answer using a rule-based approach combined with AI analysis.
+ * Returns a numeric score between 0 and 100.
+ */
+export async function evaluateAnswer(question: string, answer: string): Promise<{ score: number; feedback: string }> {
+  if (!answer || answer.trim().length < 5) {
+    return { score: 0, feedback: "Answer is too short to evaluate." };
+  }
+
+  const prompt = `
+    Evaluate the following interview answer for the question: "${question}"
+    Candidate's Answer: "${answer}"
+    
+    Provide a score from 0 to 100 based on:
+    - Relevance to the question
+    - Technical accuracy
+    - Clarity and professionalism
+    
+    Return ONLY a JSON object with:
+    - "score": number
+    - "feedback": short sentence
+  `;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o", // Using gpt-4o as gpt-5 is not available/specified correctly in some contexts
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0].message.content || "{}";
+    const result = JSON.parse(content);
+    
+    return {
+      score: typeof result.score === 'number' ? result.score : 50,
+      feedback: result.feedback || "Evaluated."
+    };
+  } catch (error) {
+    console.error("Evaluation Error:", error);
+    // Rule-based fallback
+    const wordCount = answer.split(/\s+/).length;
+    let baseScore = Math.min(wordCount * 2, 60); // Max 60 for length
+    if (answer.toLowerCase().includes("because") || answer.toLowerCase().includes("example")) baseScore += 20;
+    
+    return { 
+      score: baseScore, 
+      feedback: "Rule-based evaluation applied due to system error." 
+    };
+  }
+}
+
 export async function generateAILogic(role: string, experience: string, goals: string) {
   const prompt = `Act as an expert career coach. Create a weekly structured technical learning roadmap for a ${experience} ${role} who wants to achieve: "${goals}".
   
@@ -21,7 +72,7 @@ export async function generateAILogic(role: string, experience: string, goals: s
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
     });
