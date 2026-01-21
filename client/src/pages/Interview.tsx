@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/ui/Layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Check, X, GraduationCap, Clock, Briefcase } from "lucide-react";
+import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize } from "lucide-react";
 
 const DOMAINS = [
   "Frontend Development",
@@ -25,6 +25,9 @@ export default function InterviewDashboard() {
   const [name, setName] = useState("");
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
   const [duration, setDuration] = useState("10");
+  const [isGreeting, setIsGreeting] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const toggleDomain = (domain: string) => {
     if (selectedDomains.includes(domain)) {
@@ -33,6 +36,89 @@ export default function InterviewDashboard() {
       setSelectedDomains([...selectedDomains, domain]);
     }
   };
+
+  const startInterview = async () => {
+    try {
+      // 1. Fullscreen
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+
+      // 2. Camera & Mic
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
+      setStream(mediaStream);
+      
+      setIsGreeting(true);
+
+      // 3. Speech Synthesis Greeting
+      const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready.`;
+      const utterance = new SpeechSynthesisUtterance(greeting);
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.error("Error starting interview:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isGreeting && videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [isGreeting, stream]);
+
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, [stream]);
+
+  if (isGreeting) {
+    return (
+      <Layout>
+        <div className="max-w-4xl mx-auto h-[calc(100vh-12rem)] flex flex-col items-center justify-center space-y-8">
+          <div className="w-full h-full relative rounded-2xl overflow-hidden bg-black shadow-2xl border-4 border-primary/10">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+            
+            <div className="absolute top-6 left-6 flex gap-3">
+              <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
+                <Video className="w-4 h-4 text-green-400" />
+                Camera ON
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
+                <Mic className="w-4 h-4 text-green-400" />
+                Mic ON
+              </div>
+            </div>
+
+            <div className="absolute bottom-6 left-6 right-6 flex justify-between items-end">
+              <div className="bg-black/50 backdrop-blur-md p-6 rounded-2xl border border-white/10 max-w-2xl">
+                <p className="text-white text-xl font-medium leading-relaxed italic">
+                  {`"Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready."`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
+                <Maximize className="w-4 h-4" />
+                Fullscreen
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -142,6 +228,7 @@ export default function InterviewDashboard() {
               size="lg" 
               className="w-full h-12 text-lg font-bold shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
               disabled={!name || selectedDomains.length === 0}
+              onClick={startInterview}
               data-testid="button-start-interview"
             >
               Start Practice Session
