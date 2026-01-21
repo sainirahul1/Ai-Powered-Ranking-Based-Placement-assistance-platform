@@ -21,6 +21,13 @@ const DOMAINS = [
   "Cybersecurity"
 ];
 
+// Extend window for Web Speech API
+declare global {
+  interface Window {
+    webkitSpeechRecognition: any;
+  }
+}
+
 export default function InterviewDashboard() {
   const [name, setName] = useState("");
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
@@ -28,6 +35,7 @@ export default function InterviewDashboard() {
   const [isGreeting, setIsGreeting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const toggleDomain = (domain: string) => {
     if (selectedDomains.includes(domain)) {
@@ -56,10 +64,51 @@ export default function InterviewDashboard() {
       // 3. Speech Synthesis Greeting
       const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready.`;
       const utterance = new SpeechSynthesisUtterance(greeting);
+      
+      utterance.onend = () => {
+        startConfirmationDetection();
+      };
+      
       window.speechSynthesis.speak(utterance);
     } catch (err) {
       console.error("Error starting interview:", err);
     }
+  };
+
+  const startConfirmationDetection = () => {
+    const SpeechRecognition = window.webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognition) {
+      console.error("Speech recognition not supported");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
+      console.log("Transcript detected:", transcript);
+      
+      const keywords = ["yes", "ready", "okay", "ok"];
+      if (keywords.some(word => transcript.includes(word))) {
+        console.log("confirmed");
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+    };
+
+    recognition.onend = () => {
+      if (isGreeting) {
+        recognition.start();
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
   };
 
   useEffect(() => {
@@ -75,6 +124,9 @@ export default function InterviewDashboard() {
       }
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
       }
     };
   }, [stream]);
@@ -107,6 +159,9 @@ export default function InterviewDashboard() {
               <div className="bg-black/50 backdrop-blur-md p-6 rounded-2xl border border-white/10 max-w-2xl">
                 <p className="text-white text-xl font-medium leading-relaxed italic">
                   {`"Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready."`}
+                </p>
+                <p className="text-primary/80 text-sm mt-4 font-semibold animate-pulse">
+                  Listening for "yes", "ready", or "okay"...
                 </p>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
