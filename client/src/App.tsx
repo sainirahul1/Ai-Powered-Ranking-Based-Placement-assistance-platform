@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Roadmap from "@/pages/Roadmap";
 import Interview from "@/pages/Interview";
+import GithubSetup from "@/pages/GithubSetup";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/roadmap" component={Roadmap} />
       <Route path="/interview" component={Interview} />
+      <Route path="/github-setup" component={GithubSetup} />
       <Route component={NotFound} />
     </Switch>
   );
