@@ -33,6 +33,7 @@ export default function InterviewDashboard() {
   const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
   const [duration, setDuration] = useState("10");
   const [isGreeting, setIsGreeting] = useState(false);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -65,6 +66,13 @@ export default function InterviewDashboard() {
       const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready.`;
       const utterance = new SpeechSynthesisUtterance(greeting);
       
+      utterance.onstart = () => {
+        // Stop any previous recognition if it exists
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+        }
+      };
+
       utterance.onend = () => {
         startConfirmationDetection();
       };
@@ -84,31 +92,50 @@ export default function InterviewDashboard() {
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true; // Use interim results for faster response
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
-      console.log("Transcript detected:", transcript);
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        transcript += event.results[i][0].transcript;
+      }
+      
+      const lowerTranscript = transcript.toLowerCase();
+      console.log("Transcript detected:", lowerTranscript);
       
       const keywords = ["yes", "ready", "okay", "ok"];
-      if (keywords.some(word => transcript.includes(word))) {
+      if (keywords.some(word => lowerTranscript.includes(word))) {
         console.log("confirmed");
+        setIsConfirmed(true);
+        // Visual feedback would go here
       }
     };
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
-    };
-
-    recognition.onend = () => {
-      if (isGreeting) {
-        recognition.start();
+      if (event.error === 'no-speech') {
+        // Restart on silence
+        try { recognition.start(); } catch (e) {}
       }
     };
 
-    recognition.start();
-    recognitionRef.current = recognition;
+    recognition.onend = () => {
+      if (isGreeting && !isConfirmed) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error("Failed to restart recognition:", e);
+        }
+      }
+    };
+
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch (e) {
+      console.error("Initial start failed:", e);
+    }
   };
 
   useEffect(() => {
@@ -128,6 +155,7 @@ export default function InterviewDashboard() {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+      window.speechSynthesis.cancel();
     };
   }, [stream]);
 
@@ -160,9 +188,12 @@ export default function InterviewDashboard() {
                 <p className="text-white text-xl font-medium leading-relaxed italic">
                   {`"Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready."`}
                 </p>
-                <p className="text-primary/80 text-sm mt-4 font-semibold animate-pulse">
-                  Listening for "yes", "ready", or "okay"...
-                </p>
+                <div className="mt-4 flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${isConfirmed ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-primary animate-pulse'}`} />
+                  <p className={`${isConfirmed ? 'text-green-400' : 'text-primary/80'} text-sm font-semibold`}>
+                    {isConfirmed ? "Confirmed! Getting ready..." : "Listening for \"yes\", \"ready\", or \"okay\"..."}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
                 <Maximize className="w-4 h-4" />
