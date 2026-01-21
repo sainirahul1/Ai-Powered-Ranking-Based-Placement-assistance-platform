@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize } from "lucide-react";
+import { Check, X, GraduationCap, Clock, Briefcase, Video, Mic, Maximize, AlertCircle } from "lucide-react";
 
 const DOMAINS = [
   "Frontend Development",
@@ -25,6 +25,7 @@ const DOMAINS = [
 declare global {
   interface Window {
     webkitSpeechRecognition: any;
+    SpeechRecognition: any;
   }
 }
 
@@ -34,6 +35,9 @@ export default function InterviewDashboard() {
   const [duration, setDuration] = useState("10");
   const [isGreeting, setIsGreeting] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -48,9 +52,10 @@ export default function InterviewDashboard() {
 
   const startInterview = async () => {
     try {
+      setError(null);
       // 1. Fullscreen
       if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
+        await document.documentElement.requestFullscreen().catch(e => console.error("Fullscreen failed", e));
       }
 
       // 2. Camera & Mic
@@ -59,64 +64,61 @@ export default function InterviewDashboard() {
         audio: true
       });
       setStream(mediaStream);
-      
       setIsGreeting(true);
 
       // 3. Speech Synthesis Greeting
-      const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready.`;
+      const greeting = `Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready. Please say "Ready" or "I am ready" to start.`;
       const utterance = new SpeechSynthesisUtterance(greeting);
       
-      utterance.onstart = () => {
-        // Stop any previous recognition if it exists
-        if (recognitionRef.current) {
-          recognitionRef.current.stop();
-        }
-      };
-
       utterance.onend = () => {
         startConfirmationDetection();
       };
       
       window.speechSynthesis.speak(utterance);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error starting interview:", err);
+      setError("Failed to access camera/microphone. Please ensure permissions are granted.");
     }
   };
 
   const startConfirmationDetection = () => {
-    const SpeechRecognition = window.webkitSpeechRecognition || (window as any).SpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      console.error("Speech recognition not supported");
+      setError("Speech recognition is not supported in this browser. Please use Chrome.");
       return;
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
     }
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = true; // Use interim results for faster response
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
-      let transcript = "";
+      let currentTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        transcript += event.results[i][0].transcript;
+        currentTranscript += event.results[i][0].transcript;
       }
       
-      const lowerTranscript = transcript.toLowerCase();
+      const lowerTranscript = currentTranscript.toLowerCase();
+      setTranscript(lowerTranscript);
       console.log("Transcript detected:", lowerTranscript);
       
-      const keywords = ["yes", "ready", "okay", "ok"];
+      const keywords = ["yes", "ready", "okay", "ok", "begin", "start"];
       if (keywords.some(word => lowerTranscript.includes(word))) {
         console.log("confirmed");
         setIsConfirmed(true);
-        // Visual feedback would go here
+        // In a real app, this would trigger state machine transition
       }
     };
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
-      if (event.error === 'no-speech') {
-        // Restart on silence
-        try { recognition.start(); } catch (e) {}
+      if (event.error === 'not-allowed') {
+        setError("Microphone permission denied for speech recognition.");
       }
     };
 
@@ -157,7 +159,7 @@ export default function InterviewDashboard() {
       }
       window.speechSynthesis.cancel();
     };
-  }, [stream]);
+  }, []);
 
   if (isGreeting) {
     return (
@@ -188,11 +190,25 @@ export default function InterviewDashboard() {
                 <p className="text-white text-xl font-medium leading-relaxed italic">
                   {`"Hello ${name}. Welcome to your AI Mock Interview focused on ${selectedDomains.join(", ")}. I am your interviewer today. Let's begin when you are ready."`}
                 </p>
-                <div className="mt-4 flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${isConfirmed ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-primary animate-pulse'}`} />
-                  <p className={`${isConfirmed ? 'text-green-400' : 'text-primary/80'} text-sm font-semibold`}>
-                    {isConfirmed ? "Confirmed! Getting ready..." : "Listening for \"yes\", \"ready\", or \"okay\"..."}
-                  </p>
+                
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${isConfirmed ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-primary animate-pulse'}`} />
+                    <p className={`${isConfirmed ? 'text-green-400' : 'text-primary/80'} text-sm font-semibold`}>
+                      {isConfirmed ? "Confirmed! Getting ready..." : "Listening... try saying \"READY\" loud and clear."}
+                    </p>
+                  </div>
+                  {transcript && !isConfirmed && (
+                    <p className="text-white/40 text-xs italic ml-6">
+                      Hearing: "{transcript}"
+                    </p>
+                  )}
+                  {error && (
+                    <div className="flex items-center gap-2 text-red-400 text-xs mt-2">
+                      <AlertCircle className="w-3 h-3" />
+                      {error}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-md rounded-full text-white text-sm border border-white/20">
@@ -215,6 +231,13 @@ export default function InterviewDashboard() {
             Practice with our AI interviewer to sharpen your skills and boost your confidence.
           </p>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-800">
+            <AlertCircle className="w-5 h-5" />
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
 
         <Card className="border-2 shadow-xl">
           <CardHeader className="space-y-1 pb-8">
