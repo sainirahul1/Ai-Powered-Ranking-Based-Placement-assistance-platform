@@ -12,6 +12,13 @@ export const api = {
         400: z.object({ message: z.string() }),
       },
     },
+    list: {
+      method: 'GET' as const,
+      path: '/api/roadmaps',
+      responses: {
+        200: z.array(z.custom<typeof roadmaps.$inferSelect>()),
+      },
+    },
   },
   interview: {
     start: {

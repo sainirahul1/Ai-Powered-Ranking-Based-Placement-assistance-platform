@@ -24,15 +24,16 @@ export async function registerRoutes(
 
   // Application Routes using shared/routes.ts definitions
   
-  // Roadmap Generation
+// Roadmap Generation
   app.post(api.roadmap.generate.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
       const data = api.roadmap.generate.input.parse(req.body);
       
       // AI Roadmap logic
       const steps = await generateAILogic(data.role, data.experienceLevel, data.goals);
       
-      const roadmap = await storage.createRoadmap({
+      const roadmap = await storage.createRoadmap(req.user.id, {
         ...data,
         generatedContent: steps
       } as any);
@@ -44,8 +45,39 @@ export async function registerRoutes(
     }
   });
 
+  // Start Interview
+  app.post(api.interview.start.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const data = api.interview.start.input.parse(req.body);
+      const interview = await storage.createInterview(req.user.id, data);
+      res.status(201).json(interview);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            res.status(400).json({ message: "Invalid input data" });
+        } else {
+            res.status(500).json({ message: "Internal server error" });
+        }
+    }
+  });
+
+  // List Interviews
+  app.get(api.interview.list.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const interviews = await storage.getInterviewsByUserId(req.user.id);
+    res.json(interviews);
+  });
+
+  // List Roadmaps
+  app.get(api.roadmap.list.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const roadmaps = await storage.getRoadmapsByUserId(req.user.id);
+    res.json(roadmaps);
+  });
+
   // Mock Interview Session Endpoints
   app.post("/api/interview/session/start", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
       const { name, domains, duration } = req.body;
       
@@ -59,6 +91,7 @@ export async function registerRoutes(
           name, 
           domains, 
           duration,
+          userId: req.user.id,
           startTime: Date.now() 
         }, 
         JWT_SECRET,
@@ -76,6 +109,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/interview/session/timer", (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ message: "No session token" });
 
@@ -96,42 +130,8 @@ export async function registerRoutes(
     }
   });
 
-  // Start Interview (Original)
-  app.post(api.interview.start.path, async (req, res) => {
-    try {
-      const data = api.interview.start.input.parse(req.body);
-      const interview = await storage.createInterview(data);
-      res.status(201).json(interview);
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            res.status(400).json({ message: "Invalid input data" });
-        } else {
-            res.status(500).json({ message: "Internal server error" });
-        }
-    }
-  });
-
-  // List Interviews
-  app.get(api.interview.list.path, async (req, res) => {
-    const interviews = await storage.getInterviews();
-    res.json(interviews);
-  });
-
-  // MongoDB Atlas Routes
-  app.post("/api/roadmap", async (req, res) => {
-    try {
-      const { role, experienceLevel, goals } = req.body;
-      const steps = await generateAILogic(role || "Developer", experienceLevel || "Beginner", goals || "Career growth");
-      res.json({
-        role: role || "Developer",
-        steps: steps
-      });
-    } catch (error) {
-      res.status(500).json({ message: "AI Generation failed" });
-    }
-  });
-
   app.post("/api/interview/answer", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
       const { question, answer } = req.body;
       if (!question || !answer) {
@@ -146,6 +146,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/interview/report", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json({
       score: 85,
       summary: "Great performance! Focus on system design.",

@@ -1,5 +1,17 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type InsertRoadmap } from "@shared/routes";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@shared/routes";
+import { type InsertRoadmap, type Roadmap } from "@shared/schema";
+
+export function useRoadmaps() {
+  return useQuery<Roadmap[]>({
+    queryKey: [api.roadmap.list.path],
+    queryFn: async () => {
+      const res = await fetch(api.roadmap.list.path);
+      if (!res.ok) throw new Error("Failed to fetch roadmaps");
+      return res.json();
+    },
+  });
+}
 
 export function useGenerateRoadmap() {
   const queryClient = useQueryClient();
@@ -19,7 +31,8 @@ export function useGenerateRoadmap() {
       
       return res.json();
     },
-    // We don't necessarily need to invalidate queries here if we just display the result,
-    // but if we had a list of saved roadmaps, we would.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.roadmap.list.path] });
+    },
   });
 }

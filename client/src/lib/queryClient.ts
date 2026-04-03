@@ -55,3 +55,7 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export function getQueryClient() {
+  return queryClient;
+}

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type InsertInterview } from "@shared/routes";
+import { api } from "@shared/routes";
+import { type InsertInterview, type Interview } from "@shared/schema";
 
 export function useInterviews() {
   return useQuery({
